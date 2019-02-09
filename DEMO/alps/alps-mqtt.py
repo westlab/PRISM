@@ -5,10 +5,50 @@ import btle
 import binascii
 import paho.mqtt.client as mqtt
 import sys
+import yaml
+import argparse
 
-host = '192.168.0.10'
-port = 1883
-topic = '/PRISM/SENSOR/'
+parser = argparse.ArgumentParser(
+    prog = 'alpsmqtt.py',
+    usage = 'Receive BLE sensor data and send to MQTT server',
+    description= 'PRISM demo for ALPS Smart IoT BLE Sensor module\nYou have to install and Bluetooth modules',
+    epilog = 'Programmer: Hiroaki Nishi west@west.yokohama',
+    add_help = True)
+parser.add_argument('--version', version='%(prog)s 0.1',
+    action = 'version',
+    help = 'verbose operation (output sensor data)')
+parser.add_argument('-v', '--verbose',
+    action = 'store_true',
+    help = 'verbose operation (output sensor data)',
+    default = False)
+parser.add_argument('-q', '--quiet',
+    action = 'store_true',
+    help = 'quiet (does not output data messages)',
+    default = False)
+parser.add_argument('-c', '--config',
+    action = 'store',
+    help = 'specify YAML config file',
+    default = '../config.yml',
+    type = str)
+
+args = parser.parse_args()
+vflag = False
+if args.verbose:
+    vflag = True
+qflag = False
+if args.quiet:
+    qflag = True
+sqflag = False
+
+f = open(args.config, "r+")
+confdata = yaml.load(f)
+
+host = confdata['mqtthost']
+#'192.168.0.10'
+port = confdata['mqttport']
+#1883
+topic = confdata['topic']+confdata['sensortopic']
+#'/PRISM/SENSOR/'
  
 def s16(value):
     return -(value & 0b1000000000000000) | (value & 0b0111111111111111)
@@ -20,13 +60,11 @@ class NtfyDelegate(btle.DefaultDelegate):
         self.alpsid = alpsid
         self.cli = cli
         # ... initialise here
- 
     def handleNotification(self, cHandle, data): 
         # ... perhaps check cHandle
         # ... process 'data'
         cal = binascii.b2a_hex(data)
         #print(u'handleNotification : {0}-{1}:'.format(cHandle, cal))
-         
         if int((cal[0:2]), 16) == 0xf2:
             GeoMagnetic_X = s16(int((cal[6:8] + cal[4:6]), 16)) * 0.15
             GeoMagnetic_Y = s16(int((cal[10:12] + cal[8:10]), 16)) * 0.15
@@ -54,12 +92,10 @@ class NtfyDelegate(btle.DefaultDelegate):
             self.cli.publish(topic+'UV/'+str(self.alpsid), '{0:.3f}'.format(UV))
             self.cli.publish(topic+'ILLUMI/'+str(self.alpsid), '{0:.3f}'.format(AmbientLight))
  
-
 class AlpsSensor(Peripheral):
     def __init__(self,addr):
         Peripheral.__init__(self,addr)
         self.result = 1
- 
 
 def main():
     print('start')
@@ -70,27 +106,36 @@ def main():
     client.connect(host, port=port, keepalive=60)
     print('ALPS setup')
     alpsarray = []
-    alpsarray.append(AlpsSensor("48:F0:7B:78:47:30"))
-    alpsarray.append(AlpsSensor("48:F0:7B:78:47:33"))
-    alpsarray.append(AlpsSensor("48:F0:7B:78:47:25"))
+    n = 1
+    while True:
+        if confdata['alpsmodule'+n] is not None:
+        alpsarray.append(AlpsSensor(confdata['alpsmodule'+n])
     for i,a in enumerate(alpsarray):
         a.setDelegate( NtfyDelegate(btle.DefaultDelegate, i, client) )
         print("node:",i)
  
         #Hybrid MAG ACC8G　100ms　/ Other 1s
-        a.writeCharacteristic(0x0013, struct.pack('<bb', 0x01, 0x00), True)# Custom1 Notify Enable 
-        a.writeCharacteristic(0x0016, struct.pack('<bb', 0x01, 0x00), True)# Custom2 Notify Enable
-         
-        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x2F, 0x03, 0x03), True)# (不揮発)保存内容の初期化
-        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x01, 0x03, 0x7F), True)# 地磁気、加速度,気圧,温度,湿度,UV,照度を有効
-        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x04, 0x03, 0x04), True)# Hybrid Mode
-    #    a.writeCharacteristic(0x0018, struct.pack('<bbbb', 0x06, 0x04, 0x64, 0x00), True) # Fast 100msec (地磁気,加速度)
-        a.writeCharacteristic(0x0018, struct.pack('<bbbb', 0x06, 0x04, 0x7A, 0x01), True) # Fast 250msec (地磁気,加速度)
-        a.writeCharacteristic(0x0018, struct.pack('<bbbb', 0x05, 0x04, 0x01, 0x00), True) # Slow 1sec (気圧,温度,湿度,UV,照度)     
-
-        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x02, 0x03, 0x02), True) # 加速度±8G
-        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x2F, 0x03, 0x01), True)# 設定内容保存
-        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x20, 0x03, 0x01), True)# センサ計測開始
+        a.writeCharacteristic(0x0013, struct.pack('<bb', 0x01, 0x00), True)
+        # Custom1 Notify Enable 
+        a.writeCharacteristic(0x0016, struct.pack('<bb', 0x01, 0x00), True)
+        # Custom2 Notify Enable
+        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x2F, 0x03, 0x03), True)
+        # (不揮発)保存内容の初期化
+        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x01, 0x03, 0x7F), True)
+        # 地磁気、加速度,気圧,温度,湿度,UV,照度を有効
+        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x04, 0x03, 0x04), True)
+        # Hybrid Mode
+        # a.writeCharacteristic(0x0018, struct.pack('<bbbb', 0x06, 0x04, 0x64, 0x00), True) # Fast 100msec (地磁気,加速度)
+        a.writeCharacteristic(0x0018, struct.pack('<bbbb', 0x06, 0x04, 0x7A, 0x01), True) 
+        # Fast 250msec (地磁気,加速度)
+        a.writeCharacteristic(0x0018, struct.pack('<bbbb', 0x05, 0x04, 0x01, 0x00), True)
+        # Slow 1sec (気圧,温度,湿度,UV,照度)     
+        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x02, 0x03, 0x02), True)
+        # 加速度±8G
+        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x2F, 0x03, 0x01), True)
+        # 設定内容保存
+        a.writeCharacteristic(0x0018, struct.pack('<bbb', 0x20, 0x03, 0x01), True)
+        # センサ計測開始
          
     # Main loop --------
     while True:
@@ -105,7 +150,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-if __name__ == "__main__":
-    main()
- 
