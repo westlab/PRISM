@@ -108,8 +108,10 @@ def main():
     alpsarray = []
     n = 1
     while True:
-        if confdata['alpsmodule'+n] is not None:
-        alpsarray.append(AlpsSensor(confdata['alpsmodule'+n])
+        if confdata['alpsmodule'+str(n)] is not None:
+            alpsarray.append(AlpsSensor(confdata['alpsmodule'+str(n)]))
+        else:
+            break
     for i,a in enumerate(alpsarray):
         a.setDelegate( NtfyDelegate(btle.DefaultDelegate, i, client) )
         print("node:",i)

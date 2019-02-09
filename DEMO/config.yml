@@ -3,6 +3,8 @@ mqttport: 1883
 topic: /PRISM/
 sensortopic: SENSOR/
 persontopic: PERSON/
-alpsmodule1: 48:F0:7B:78:47:30
+alpsmodule1: 48:F0:7B:78:47:25
 alpsmodule2: 48:F0:7B:78:47:33
-alpsmodule3: 48:F0:7B:78:47:25
+alpsmodule3: 48:F0:7B:78:47:35
+alpsmodule2: 48:F0:7B:78:47:36
+alpsmodule3: 48:F0:7B:78:47:4E
